@@ -30,4 +30,4 @@ Describe the concrete outcome expected from the change.
 
 ## Context
 
-Link back to [GOOD_FIRST_ISSUES.md](../../GOOD_FIRST_ISSUES.md) if this issue came from the starter backlog.
+Include enough background here so a contributor can start without needing off-thread context.

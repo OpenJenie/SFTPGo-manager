@@ -7,7 +7,6 @@ This repository is intended to be approachable for new contributors without lowe
 Read these first:
 
 - [README.md](README.md)
-- [GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md)
 
 The current application structure is:
 
@@ -103,7 +102,7 @@ If the PR closes an issue, reference it directly.
 
 ## Good First Issues
 
-The starter backlog is maintained in [GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md).
+Starter tasks are tracked as GitHub issues labeled `good first issue` and `help wanted`.
 
 These are intentionally scoped to be:
 

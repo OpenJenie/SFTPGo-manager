@@ -3,6 +3,3 @@ contact_links:
   - name: Contribution guide
     url: https://github.com/OpenJenie/SFTPGo-manager/blob/main/CONTRIBUTING.md
     about: Read the contribution workflow and quality expectations first.
-  - name: Starter backlog
-    url: https://github.com/OpenJenie/SFTPGo-manager/blob/main/GOOD_FIRST_ISSUES.md
-    about: Browse scoped starter tasks before opening a good first issue.

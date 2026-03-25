@@ -8,8 +8,6 @@ Built on top of [SFTPGo](https://github.com/drakkan/sftpgo) for SFTP and [MinIO]
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, and quality expectations.
 
-Starter tasks for new contributors are listed in [GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md).
-
 ## Architecture
 
 <a href="diagrams/exported/architecture-light.svg">

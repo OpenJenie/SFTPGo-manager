@@ -3,6 +3,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY *.go ./
+COPY internal/ internal/
 COPY docs/ docs/
 RUN go build -o /sftpgo-manager .
 

@@ -6,12 +6,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	httpSwagger "github.com/swaggo/http-swagger/v2"
-
 	_ "sftpgo-manager/docs"
+
+	"sftpgo-manager/internal/config"
+	"sftpgo-manager/internal/httpapi"
+	"sftpgo-manager/internal/service"
+	"sftpgo-manager/internal/sftpgo"
+	"sftpgo-manager/internal/sqlite"
+	"sftpgo-manager/internal/storage"
 )
 
 // @title SFTPGo Manager API
@@ -27,72 +31,37 @@ import (
 // @description Enter "Bearer <api_key>"
 
 func main() {
-	cfg := LoadConfig()
+	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
-	db, err := NewDB("sftpgo.db")
+	repo, err := sqlite.New(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("failed to init db: %v", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { _ = repo.Close() }()
 
-	sftpgoClient := NewSFTPGoClient(cfg.SFTPGoURL, cfg.AdminUser, cfg.AdminPass)
+	sftpgoClient := sftpgo.New(cfg.SFTPGoURL, cfg.SFTPGoAdminUser, cfg.SFTPGoAdminPass)
+	bootstrap := service.NewBootstrapService(cfg, repo)
+	auth := service.NewAuthService(repo)
+	tenants := service.NewTenantService(cfg, repo, sftpgoClient)
+	external := service.NewExternalAuthService(cfg, repo)
 
-	h := &Handlers{db: db, sftpgo: sftpgoClient, cfg: cfg}
-
+	var uploads *service.UploadService
 	if cfg.S3Endpoint != "" {
-		worker, err := NewWorker(db, cfg)
+		store, err := storage.NewMinIOStore(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
 		if err != nil {
-			log.Printf("warning: worker init failed (CSV processing disabled): %v", err)
+			log.Printf("warning: object store init failed (CSV processing disabled): %v", err)
 		} else {
-			h.worker = worker
-			log.Printf("worker initialized, CSV processing enabled")
+			uploads = service.NewUploadService(repo, store, cfg.S3Bucket)
 		}
 	}
 
-	mux := http.NewServeMux()
-
-	// Bootstrap endpoint — no auth
-	mux.HandleFunc("/api/keys", h.CreateAPIKey)
-
-	// SFTPGo hook endpoints — no API key auth (called by SFTPGo internally)
-	mux.HandleFunc("/api/auth/hook", h.ExternalAuthHook)
-	mux.HandleFunc("/api/events/upload", h.UploadEventHook)
-
-	// Authenticated endpoints
-	mux.HandleFunc("/api/tenants", AuthMiddleware(db, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			h.CreateTenant(w, r)
-		} else {
-			h.ListTenants(w, r)
-		}
-	}))
-
-	mux.HandleFunc("/api/tenants/", AuthMiddleware(db, func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/records") {
-			h.ListTenantRecords(w, r)
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/validate") {
-			h.ValidateTenant(w, r)
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/keys") {
-			h.UpdateTenantKeys(w, r)
-			return
-		}
-		switch r.Method {
-		case http.MethodGet:
-			h.GetTenant(w, r)
-		case http.MethodDelete:
-			h.DeleteTenant(w, r)
-		default:
-			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
-		}
-	}))
-
-	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
-
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: mux}
+	srv := &http.Server{
+		Addr:    cfg.ListenAddr,
+		Handler: httpapi.New(bootstrap, auth, tenants, external, uploads),
+	}
 
 	go func() {
 		sigCh := make(chan os.Signal, 1)

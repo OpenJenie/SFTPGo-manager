@@ -62,7 +62,7 @@ Wait for all services to become healthy, then follow the usage examples below.
 
 | Method | Path                       | Auth     | Description                      |
 |--------|----------------------------|----------|----------------------------------|
-| POST   | `/api/keys`                | none     | Bootstrap an API key             |
+| POST   | `/api/keys`                | bootstrap token | Create the initial API key once |
 | POST   | `/api/tenants`               | API key  | Create a new tenant              |
 | GET    | `/api/tenants`               | API key  | List all tenants                 |
 | GET    | `/api/tenants/{id}`          | API key  | Get tenant details               |
@@ -73,7 +73,7 @@ Wait for all services to become healthy, then follow the usage examples below.
 | POST   | `/api/auth/hook`           | internal | SFTPGo external auth hook        |
 | POST   | `/api/events/upload`       | internal | SFTPGo upload event hook         |
 
-All endpoints except `/api/keys`, `/swagger/*`, and internal hooks require `Authorization: Bearer <api_key>`.
+All endpoints except `/swagger/*` and internal hooks require bootstrap or API-key auth.
 
 ## Swagger UI
 
@@ -81,11 +81,14 @@ Open http://localhost:9090/swagger/index.html after starting the stack.
 
 ## Usage
 
-### 1. Bootstrap an API key
+### 1. Bootstrap the initial API key
 
 ```bash
-curl -s -X POST localhost:9090/api/keys | jq .
+curl -s -X POST localhost:9090/api/keys \
+  -H "X-Bootstrap-Token: local-bootstrap-token" | jq .
 ```
+
+This endpoint is one-time only. After the first API key exists, later bootstrap attempts return `409 Conflict`.
 
 ### 2. Create a tenant
 
@@ -94,6 +97,8 @@ curl -s -H "Authorization: Bearer <KEY>" \
      -X POST localhost:9090/api/tenants \
      -d '{"username":"tenant1"}' | jq .
 ```
+
+The generated password is returned only in the create response. `GET /api/tenants` and `GET /api/tenants/{id}` do not expose password material.
 
 ### 3. Upload a CSV via SFTP
 
@@ -126,9 +131,11 @@ All configuration is via environment variables:
 | Variable           | Default                    | Description              |
 |--------------------|----------------------------|--------------------------|
 | `SFTPGO_URL`       | `http://localhost:8080`    | SFTPGo API URL           |
-| `SFTPGO_ADMIN_USER`| `admin`                    | SFTPGo admin username    |
-| `SFTPGO_ADMIN_PASS`| `admin`                    | SFTPGo admin password    |
+| `SFTPGO_ADMIN_USER`| _(required in production)_ | SFTPGo admin username    |
+| `SFTPGO_ADMIN_PASS`| _(required in production)_ | SFTPGo admin password    |
+| `BOOTSTRAP_TOKEN`  | _(disabled if empty)_      | One-time bootstrap token |
 | `LISTEN_ADDR`      | `:9090`                    | Backend listen address   |
+| `DB_PATH`          | `sftpgo.db`                | SQLite database path     |
 | `DATA_DIR`         | `/srv/sftpgo/data`         | Base data directory      |
 | `S3_BUCKET`        | `sftpgo`                   | S3 bucket name           |
 | `S3_REGION`        | `us-east-1`                | S3 region                |
@@ -140,14 +147,15 @@ All configuration is via environment variables:
 
 ```
 .
-├── main.go              # Entrypoint, routing, graceful shutdown
-├── config.go            # Environment-based configuration
-├── db.go                # SQLite schema + queries
-├── auth.go              # API key middleware
-├── sftpgo_client.go     # SFTPGo REST API client
-├── handlers.go          # HTTP handlers
-├── worker.go            # S3 download + CSV parsing
-├── *_test.go            # Unit tests
+├── main.go              # Entrypoint and dependency wiring
+├── internal/
+│   ├── config/          # Environment-based configuration
+│   ├── domain/          # Core models and interfaces
+│   ├── httpapi/         # HTTP transport and integration tests
+│   ├── service/         # Tenant/bootstrap/auth/upload use cases
+│   ├── sftpgo/          # SFTPGo admin API adapter
+│   ├── sqlite/          # SQLite repository
+│   └── storage/         # Object-store adapter
 ├── docs/                # Generated Swagger docs
 ├── diagrams/            # Excalidraw source files
 │   └── exported/        # Auto-generated light/dark SVGs
@@ -162,6 +170,7 @@ All configuration is via environment variables:
 ```bash
 go test ./... -v
 go test -race ./...
+go test ./... -cover
 ```
 
 ## Development

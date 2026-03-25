@@ -5,16 +5,16 @@ services:
       - "8080:8080"   # HTTP API + WebAdmin
       - "2022:2022"   # SFTP
     environment:
-      SFTPGO_DEFAULT_ADMIN_USERNAME: admin
-      SFTPGO_DEFAULT_ADMIN_PASSWORD: admin
+      SFTPGO_DEFAULT_ADMIN_USERNAME: sftpgo-admin
+      SFTPGO_DEFAULT_ADMIN_PASSWORD: sftpgo-admin-dev-pass
       SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN: "true"
       SFTPGO_SFTPD__BINDINGS__0__PORT: 2022
       SFTPGO_HTTPD__BINDINGS__0__PORT: 8080
       # External auth: SFTPGo calls our backend to authenticate users
       SFTPGO_DATA_PROVIDER__EXTERNAL_AUTH_HOOK: http://backend:9090/api/auth/hook
       SFTPGO_DATA_PROVIDER__EXTERNAL_AUTH_SCOPE: "0"
-      # File event hooks: notify backend on upload/download/delete
-      SFTPGO_COMMON__ACTIONS__EXECUTE_ON: upload,download,delete
+      # File event hooks: only uploads trigger ingestion
+      SFTPGO_COMMON__ACTIONS__EXECUTE_ON: upload
       SFTPGO_COMMON__ACTIONS__HOOK: http://backend:9090/api/events/upload
     volumes:
       - sftpgo-data:/srv/sftpgo/data
@@ -34,8 +34,8 @@ services:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Console
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: minio-root-dev
+      MINIO_ROOT_PASSWORD: minio-root-dev-secret
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data
@@ -53,9 +53,8 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc alias set myminio http://minio:9000 minio-root-dev minio-root-dev-secret;
       mc mb --ignore-existing myminio/sftpgo;
-      mc anonymous set download myminio/sftpgo;
       echo 'Bucket ready';
       "
 
@@ -65,18 +64,23 @@ services:
       - "9090:9090"
     environment:
       SFTPGO_URL: http://sftpgo:8080
-      SFTPGO_ADMIN_USER: admin
-      SFTPGO_ADMIN_PASS: admin
+      SFTPGO_ADMIN_USER: sftpgo-admin
+      SFTPGO_ADMIN_PASS: sftpgo-admin-dev-pass
+      BOOTSTRAP_TOKEN: local-bootstrap-token
       LISTEN_ADDR: ":9090"
+      DB_PATH: /data/sftpgo.db
       DATA_DIR: /srv/sftpgo/data
       # S3/MinIO config
       S3_BUCKET: sftpgo
       S3_REGION: us-east-1
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
+      S3_ACCESS_KEY: minio-root-dev
+      S3_SECRET_KEY: minio-root-dev-secret
+    volumes:
+      - backend-data:/data
 
 volumes:
+  backend-data:
   sftpgo-data:
   sftpgo-home:
   minio-data:
